@@ -1,0 +1,5 @@
+# 本机联调专用（不进发布物）：以绝对路径直接加载本 checkout 的构建产物
+# 用法：dsh web --patch C:/wwwroot/dsh-plugin-top/cordis.local.yml
+- insert:
+    - id: plugin-top
+      name: 'C:/wwwroot/dsh-plugin-top/dist/index.mjs'
