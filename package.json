@@ -1,7 +1,7 @@
 {
   "name": "dsh-plugin-top",
-  "version": "0.3.0",
-  "description": "yhbd.top 插件雷达：DSH 侧边栏 plugin_top 按钮 + 悬浮面板直接嵌入 www.yhbd.top 网页，榜单 / 搜索 / 分类 / 安装命令全部走 yhbd.top 实时同步；附带 Agent 可调用的搜索/榜单工具。",
+  "version": "0.4.0",
+  "description": "yhbd.top 插件雷达：DSH 侧边栏 plugin_top 按钮 + 悬浮面板（搜索 / 分类 / 今日新增 / 飙升 / 星榜），数据由插件内嵌的同源 HTTP 反代拉取，无需 CORS / nginx 配置；附带 Agent 可调用的搜索/榜单工具与「安装」一键写入会话输入框。",
   "type": "module",
   "main": "dist/index.mjs",
   "exports": {

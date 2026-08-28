@@ -202,4 +202,54 @@ export function apply(ctx: Context, config: Config) {
       },
     }),
   )
+
+  // ---------- 浏览器侧反向代理：把 https://www.yhbd.top/data/plugins.micro.json
+  //            暴露成同源 /api/plugin-top/data —— 客户端 fetch 不走跨域、
+  //            不依赖 nginx reload、不依赖 yhbd.top 加 CORS 头 ----------
+  const baseUrl = config.baseUrl.replace(/\/+$/, '')
+  ctx.effect(() => {
+    const dispose = (ctx as any).webServer.register({
+      kind: 'exact',
+      path: '/api/plugin-top/data',
+      handler: async (req: any, res: any) => {
+        // 仅 GET / HEAD
+        if (req.method !== 'GET' && req.method !== 'HEAD') {
+          res.writeHead(405, { 'Content-Type': 'text/plain' })
+          res.end('Method Not Allowed')
+          return
+        }
+        const upstreamUrl = `${baseUrl}/data/plugins.micro.json`
+        const ctrl = new AbortController()
+        const t = setTimeout(() => ctrl.abort(), config.timeoutMs)
+        try {
+          const r = await fetch(upstreamUrl, {
+            signal: ctrl.signal,
+            headers: { 'user-agent': 'dsh-plugin-top/0.4 (server proxy)' },
+          })
+          clearTimeout(t)
+          const headers: Record<string, string> = {
+            'Content-Type': r.headers.get('content-type') || 'application/json',
+            // 让浏览器可以直接 fetch 同源，缓存由 nginx 默认规则控制
+            'Cache-Control': 'public, max-age=300',
+          }
+          // 透传上游 content-encoding（如果 nginx gzip 了），浏览器会自行解
+          const enc = r.headers.get('content-encoding')
+          if (enc) headers['Content-Encoding'] = enc
+          res.writeHead(r.status, headers)
+          if (req.method === 'HEAD') {
+            res.end()
+            return
+          }
+          const buf = Buffer.from(await r.arrayBuffer())
+          res.end(buf)
+        } catch (err: any) {
+          clearTimeout(t)
+          const msg = err?.message || String(err)
+          res.writeHead(502, { 'Content-Type': 'application/json; charset=utf-8' })
+          res.end(JSON.stringify({ error: 'upstream_failed', message: msg, upstream: upstreamUrl }))
+        }
+      },
+    })
+    return () => dispose()
+  }, 'plugin-top: /api/plugin-top/data upstream proxy')
 }
