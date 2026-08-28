@@ -1,0 +1,52 @@
+{
+  "name": "dsh-plugin-top",
+  "version": "0.1.0",
+  "description": "yhbd.top 插件雷达：在 DSH 会话里直接搜索 / 浏览 www.yhbd.top 收录的数千个 DeepSeek Harness 插件，给出推荐与安装命令。",
+  "type": "module",
+  "main": "dist/index.js",
+  "files": [
+    "dist",
+    "cordis.patch.yml",
+    "README.md"
+  ],
+  "keywords": [
+    "dsh-plugin",
+    "dsh-bundle",
+    "cordis",
+    "plugin-marketplace",
+    "yhbd"
+  ],
+  "license": "MIT",
+  "homepage": "https://www.yhbd.top",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/yhbd-top/dsh-plugin-top.git"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  },
+  "scripts": {
+    "build": "tsdown",
+    "prepare": "tsdown",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@deepseek-ai/dsh-tools": "^0.0.1-rc.1"
+  },
+  "peerDependencies": {
+    "@deepseek-ai/cordis": "^4.0.0",
+    "@deepseek-ai/schemastery": "*"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "@deepseek-ai/cordis": "^4.0.1",
+    "@deepseek-ai/schemastery": "latest",
+    "tsdown": "latest",
+    "typescript": "^5.6.0"
+  },
+  "engines": {
+    "node": ">=18.17.0"
+  }
+}
