@@ -50,7 +50,8 @@ const CSS = `
 [data-yhbd-cat]{padding:2px 8px;border-radius:999px;border:1px solid var(--dsw-alias-border-l2,rgba(127,127,127,.25));cursor:pointer;font-size:11px;background:transparent;color:inherit;font-variant-numeric:tabular-nums}
 [data-yhbd-cat]:hover{background:var(--dsw-alias-interactive-bg-hover,rgba(127,127,127,.1))}
 [data-yhbd-cat][data-active]{background:var(--dsw-alias-brand-1,#1677ff);color:#fff;border-color:transparent;box-shadow:0 1px 2px rgba(22,119,255,.35)}
-[data-yhbd-list]{flex:1;overflow:auto;padding:4px 8px 8px}
+[data-yhbd-list]{flex:1;overflow:auto;padding:4px 12px 8px;display:grid;grid-template-columns:repeat(auto-fill,minmax(390px,1fr));column-gap:18px;align-content:start}
+[data-yhbd-list]>[data-yhbd-status]{grid-column:1/-1}
 [data-yhbd-row]{padding:8px 10px;border-radius:8px;cursor:pointer;border-bottom:1px solid var(--dsw-alias-border-l1,rgba(127,127,127,.06))}
 [data-yhbd-row]:hover{background:var(--dsw-alias-interactive-bg-hover,rgba(127,127,127,.12))}
 [data-yhbd-list] [data-yhbd-row]:last-child{border-bottom:none}
@@ -140,6 +141,49 @@ function installGuide(p) {
 }
 
 // ---------------------------------------------------------------- component
+// 五个榜单，口径与站点 rankings.html 对齐（native/compatible 分组隔离，2026-08-27 定调）
+const TABS = [
+  { id: "top", label: "原生星榜" },
+  { id: "rising", label: "飙升" },
+  { id: "new", label: "今日新秀" },
+  { id: "compat", label: "兼容工具" },
+  { id: "champs", label: "分类冠军" },
+];
+
+// 分类冠军：每分类取 stars 最高的 native（与站点 rankings.html 口径一致）
+function computeChampions(data) {
+  const map = new Map(); // cat -> plugin
+  for (const p of data.plugins) {
+    if (!p.n) continue;
+    const c = p.cat || "other";
+    const cur = map.get(c);
+    if (!cur || p.stars > cur.stars) map.set(c, p);
+  }
+  return Array.from(map.values()).sort((a, b) => b.stars - a.stars);
+}
+
+// 榜单计数缓存（同一份 data 只算一次，WeakMap 随数据换版自然失效）
+const _countsCache = new WeakMap();
+function boardCounts(data) {
+  let c = _countsCache.get(data);
+  if (!c) {
+    let native = 0;
+    for (const p of data.plugins) if (p.n) native++;
+    c = { native, compat: data.plugins.length - native, champs: computeChampions(data) };
+    _countsCache.set(data, c);
+  }
+  return c;
+}
+
+function tabSuffix(id, data) {
+  const c = boardCounts(data);
+  if (id === "top") return " " + c.native.toLocaleString();
+  if (id === "compat") return " " + c.compat.toLocaleString();
+  if (id === "champs") return " " + c.champs.length;
+  if (id === "new") return data.newToday ? " +" + data.newToday : "";
+  return "";
+}
+
 function YhbdTopPanel(props) {
   const { wide, onInstall, copyToClipboard } = props;
   const [open, setOpen] = useState(false);
@@ -148,7 +192,7 @@ function YhbdTopPanel(props) {
   const [loading, setLoading] = useState(false);
   const [q, setQ] = useState("");
   const [cat, setCat] = useState("");
-  const [tab, setTab] = useState("new");
+  const [tab, setTab] = useState("top");
   const [pos, setPos] = useState(null);
   const [doneKey, setDoneKey] = useState("");
   const [note, setNote] = useState(null); // { kind: 'ok'|'bad', text }
@@ -222,15 +266,17 @@ function YhbdTopPanel(props) {
   function toggle() {
     if (!open && btnRef.current) {
       const rect = btnRef.current.getBoundingClientRect();
-      const W = Math.min(480, window.innerWidth - 32);
-      const H = Math.min(520, window.innerHeight - 32);
-      let left = rect.left;
-      if (left + W > window.innerWidth - 16) left = Math.max(16, window.innerWidth - 16 - W);
-      const style = { width: W + "px", height: H + "px" };
-      if (rect.top >= H + 24) style.bottom = (window.innerHeight - rect.top + 8) + "px";
-      else style.top = (rect.bottom + 8) + "px";
-      style.left = left + "px";
-      setPos(style);
+      // 大面板：880×700 上限，随视口收缩；两栏列表吃满宽度
+      const W = Math.min(880, window.innerWidth - 64);
+      const H = Math.min(700, window.innerHeight - 48);
+      let left = rect.right + 10; // 从侧栏按钮右侧弹出
+      if (left + W > window.innerWidth - 24) left = Math.max(24, window.innerWidth - 24 - W);
+      setPos({
+        width: W + "px",
+        height: H + "px",
+        left: left + "px",
+        top: Math.max(24, window.innerHeight - 24 - H) + "px",
+      });
       setNote(null);
     }
     setOpen((o) => !o);
@@ -276,7 +322,8 @@ function YhbdTopPanel(props) {
     if (!data) return { rows: [], mode: tab };
     const tokens = q.trim().toLowerCase().split(/[\s,，、]+/).filter(Boolean);
     if (tokens.length || cat) {
-      return { rows: searchLocal(data, tokens, cat, 50), mode: "search" };
+      // 带关键词限 100 条；只点分类 chip 时全量出该分类（不截断，星序排）
+      return { rows: searchLocal(data, tokens, cat, tokens.length ? 100 : 100000), mode: "search" };
     }
     if (tab === "new") {
       const bySlug = new Map(data.plugins.map((p) => [p.slug, p]));
@@ -291,7 +338,15 @@ function YhbdTopPanel(props) {
         })
         .filter(Boolean), mode: "rising" };
     }
-    return { rows: data.plugins.slice().sort((a, b) => b.stars - a.stars), mode: "top" };
+    if (tab === "compat") {
+      // 兼容工具榜：非原生（kind=plugin 之外的通用平台工具）按 stars，全量
+      return { rows: data.plugins.filter((p) => !p.n).slice().sort((a, b) => b.stars - a.stars), mode: "compat" };
+    }
+    if (tab === "champs") {
+      return { rows: boardCounts(data).champs, mode: "champs" };
+    }
+    // 原生星榜：与站点口径一致，只排 native，全量不截断
+    return { rows: data.plugins.filter((p) => p.n).slice().sort((a, b) => b.stars - a.stars), mode: "top" };
   }, [data, q, cat, tab]);
 
   const searching = view.mode === "search";
@@ -324,18 +379,20 @@ function YhbdTopPanel(props) {
       h("button", { className: "retry", type: "button", onClick: () => loadData(true) }, "重试")
     );
   } else if (!data) {
-    body = h("data-yhbd-list", null); // 占位
     body = h("div", { "data-yhbd-status": "" }, "正在加载 3700+ 插件目录…");
   } else {
     body = h(React.Fragment, null,
-      // tabs
+      // tabs：五个榜单，与站点 rankings.html 对齐
       h("div", { "data-yhbd-tabs": "" },
-        h("button", { "data-yhbd-tab": "", "data-active": tab === "new" && !searching ? "" : undefined, type: "button", onClick: () => switchTab("new") },
-          "今日新增" + (data.newToday ? " +" + data.newToday : "")),
-        h("button", { "data-yhbd-tab": "", "data-active": tab === "rising" && !searching ? "" : undefined, type: "button", onClick: () => switchTab("rising") },
-          "近期飙升"),
-        h("button", { "data-yhbd-tab": "", "data-active": tab === "top" && !searching ? "" : undefined, type: "button", onClick: () => switchTab("top") },
-          "原生星榜")
+        TABS.map((t) =>
+          h("button", {
+            key: t.id,
+            "data-yhbd-tab": "",
+            "data-active": tab === t.id && !searching ? "" : undefined,
+            type: "button",
+            onClick: () => switchTab(t.id),
+          }, t.label + tabSuffix(t.id, data))
+        )
       ),
       // search
       h("div", { "data-yhbd-search": "" },
@@ -388,7 +445,9 @@ function YhbdTopPanel(props) {
               }, doneKey === p.slug ? "✓ 已添加" : "安装 →")
             ),
             h("div", { className: "meta" },
-              ((data.cats && data.cats[p.cat || "other"]) || p.cat || "other") + " · dsh plugin add " + p.repo),
+              view.mode === "champs"
+                ? "🏆 " + ((data.cats && data.cats[p.cat || "other"]) || p.cat || "other") + " 分类冠军 · dsh plugin add " + p.repo
+                : ((data.cats && data.cats[p.cat || "other"]) || p.cat || "other") + " · dsh plugin add " + p.repo),
             p.desc ? h("div", { className: "desc" }, p.desc) : null
           )
         )
@@ -411,10 +470,13 @@ function YhbdTopPanel(props) {
             h("button", { className: "close", type: "button", title: "关闭 (Esc)", onClick: () => setOpen(false) }, "×")
           ),
           data
-            ? h("div", { className: "sub" },
-                data.total.toLocaleString() + " 个插件" +
-                (data.newToday ? " · 今日新增 +" + data.newToday : "") +
-                (loading ? " · 更新中…" : ""))
+            ? h("div", { className: "sub" }, (function () {
+                const c = boardCounts(data);
+                return data.total.toLocaleString() + " 个插件 · 原生 " + c.native.toLocaleString() +
+                  " · 兼容 " + c.compat.toLocaleString() +
+                  (data.newToday ? " · 今日新增 +" + data.newToday : "") +
+                  (loading ? " · 更新中…" : "");
+              })())
             : h("div", { className: "sub" }, "正在连接 yhbd.top…")
         ),
         body
