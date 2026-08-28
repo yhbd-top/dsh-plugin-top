@@ -1,9 +1,14 @@
 {
   "name": "dsh-plugin-top",
-  "version": "0.1.0",
-  "description": "yhbd.top 插件雷达：在 DSH 会话里直接搜索 / 浏览 www.yhbd.top 收录的数千个 DeepSeek Harness 插件，给出推荐与安装命令。",
+  "version": "0.2.0",
+  "description": "yhbd.top 插件雷达：DSH 侧边栏 plugin_top 按钮 + 悬浮面板（搜索 / 分类 / 今日新增 / 飙升 / 星榜），数据源 www.yhbd.top；附带 Agent 可调用的搜索/榜单工具。",
   "type": "module",
   "main": "dist/index.mjs",
+  "exports": {
+    ".": "./dist/index.mjs",
+    "./client": "./dist/client.js",
+    "./package.json": "./package.json"
+  },
   "files": [
     "dist",
     "cordis.patch.yml",
@@ -25,11 +30,19 @@
   "dsh": {
     "bundle": {
       "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web",
+      "inject": [
+        "@deepseek-ai/dsh-client-ui-sidebar"
+      ]
     }
   },
   "scripts": {
-    "build": "tsdown",
-    "prepare": "tsdown",
+    "build": "tsdown && node scripts/build-client.cjs",
+    "build:server": "tsdown",
+    "build:client": "node scripts/build-client.cjs",
+    "prepare": "tsdown && node scripts/build-client.cjs",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
