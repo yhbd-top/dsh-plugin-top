@@ -6,7 +6,7 @@ import { defineTool } from '@deepseek-ai/dsh-tools'
 import Schema from '@deepseek-ai/schemastery'
 
 export const name = 'plugin-top'
-export const inject = ['tools']
+export const inject = ['tools', 'webServer']
 
 export interface Config {
   baseUrl: string
@@ -227,20 +227,19 @@ export function apply(ctx: Context, config: Config) {
             headers: { 'user-agent': 'dsh-plugin-top/0.4 (server proxy)' },
           })
           clearTimeout(t)
-          const headers: Record<string, string> = {
+          const buf = Buffer.from(await r.arrayBuffer())
+          // 不透传 Content-Encoding：
+          //   Node 18+ fetch 默认不解 gzip，body 已经是 plain JSON；
+          //   上游 nginx 仍会带 Content-Encoding: gzip，如果透传，
+          //   浏览器会按 gzip 头再次解压导致 "unsupported compression method" 报错。
+          res.writeHead(r.status, {
             'Content-Type': r.headers.get('content-type') || 'application/json',
-            // 让浏览器可以直接 fetch 同源，缓存由 nginx 默认规则控制
             'Cache-Control': 'public, max-age=300',
-          }
-          // 透传上游 content-encoding（如果 nginx gzip 了），浏览器会自行解
-          const enc = r.headers.get('content-encoding')
-          if (enc) headers['Content-Encoding'] = enc
-          res.writeHead(r.status, headers)
+          })
           if (req.method === 'HEAD') {
             res.end()
             return
           }
-          const buf = Buffer.from(await r.arrayBuffer())
           res.end(buf)
         } catch (err: any) {
           clearTimeout(t)
