@@ -7,8 +7,8 @@
 **浏览器侧**（DSH Web 装完即用）：
 
 - 侧边栏底部出现 `📡 plugin_top` 按钮（窄栏只显图标，宽栏带文字）
-- 点开大面板（最大 880×700，双栏列表）：顶层 **「全部」**（3700+ 插件全集 ★ 序）+ 站点同款细分榜单——原生星榜（native ★ 全量）· 飙升（▲delta）· 今日新秀（+N）· 兼容工具榜（非 DSH 原生生态）· 分类冠军（每分类 ★ 最高 native，🏆）
-- **分类条随榜单联动**：切到哪个榜，分类 chips 只统计**该榜内**的插件分布（如今日新秀 +189 → 分类加总=189）；点分类是**榜内过滤**、不跳回全集；本地即时搜索（仓库名 / 关键词 / 分类，秒响应）可与分类叠加
+- 点开大面板（最大 880×700，双栏列表）：顶层 **「全部」**（3900+ 插件全集 ★ 序）+ 站点同款细分榜单——原生星榜（native ★ 全量）· 飙升（▲delta）· 今日新秀（+N）· 兼容工具榜（非 DSH 原生生态）· 分类冠军（每分类 ★ 最高 native，🏆）
+- **分类条随榜单联动**：切到哪个榜，分类 chips 只统计**该榜内**的插件分布（如今日新秀 +320 → 分类加总=320）；点分类是**榜内过滤**、不跳回全集；本地即时搜索（仓库名 / 关键词 / 分类，秒响应）可与分类叠加
 - 每行右侧「**安装 →**」按钮 → 引导语写入当前会话输入框：`请帮我了解这个 dsh-plugin 社区插件：【项目名称】【github仓库地址】，安装前要做安全审查。`回车即让 Agent **先审查再装**（已有内容自动换行追加，不覆盖）；没有活动会话时降级为复制到剪贴板
 - 点仓库名或行空白处 → 新开插件详情页
 - 数据由插件内置的同源反代 `/api/plugin-top/data` 拉取，sessionStorage 6h 缓存，深浅色主题跟随 DSH
@@ -24,16 +24,16 @@
 ## 安装
 
 ```sh
-# npm（推荐，预构建产物，无需构建授权）
-dsh plugin --profile web add dsh-plugin-top
-
-# 从 GitHub 源码安装（pnpm 需要构建授权：首次 add 失败后，
+# 从 GitHub 源码安装（当前主渠道；pnpm 首次 add 需要构建授权：
 # 把 pnpm 打印的包键加入 profile 的 pnpm-workspace.yaml → allowBuilds，重试即可；
 # 建议锁 commit：github:yhbd-top/dsh-plugin-top#<sha>）
 dsh plugin --profile web add github:yhbd-top/dsh-plugin-top
 
-# 本地 tgz
-dsh plugin --profile web add ./dsh-plugin-top-0.4.0.tgz
+# npm 安装（发布到 registry 后可用）
+dsh plugin --profile web add dsh-plugin-top
+
+# 本地 tgz（在仓库目录 npm pack 得到）
+dsh plugin --profile web add ./dsh-plugin-top-1.0.0.tgz
 ```
 
 装好后**重启 DSH**（`schtasks /run /tn DSHWeb` 或你的等效方式）并硬刷新页面，侧边栏即出现 `plugin_top` 按钮。
@@ -42,7 +42,7 @@ dsh plugin --profile web add ./dsh-plugin-top-0.4.0.tgz
 
 ## 零依赖部署
 
-v0.4 把 micro.json 拉取改成 **DSH Web 进程内反向代理**（`/api/plugin-top/data` → `https://www.yhbd.top/data/plugins.micro.json`），所以：
+本插件把 micro.json 拉取做成 **DSH Web 进程内反向代理**（`/api/plugin-top/data` → `https://www.yhbd.top/data/plugins.micro.json`），所以：
 
 - 不需要 yhbd.top 加 CORS 头
 - 不需要 nginx 改任何配置

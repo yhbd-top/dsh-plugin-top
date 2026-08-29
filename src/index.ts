@@ -49,7 +49,7 @@ async function fetchFresh(baseUrl: string, timeoutMs: number): Promise<MicroData
   const url = `${baseUrl.replace(/\/+$/, '')}/data/plugins.micro.json`
   const res = await fetch(url, {
     signal: AbortSignal.timeout(timeoutMs),
-    headers: { 'user-agent': 'dsh-plugin-top/0.1' },
+    headers: { 'user-agent': 'dsh-plugin-top/1.0 (agent tool)' },
   })
   if (!res.ok) throw new Error(`HTTP ${res.status} ${url}`)
   const data = (await res.json()) as MicroData
@@ -224,7 +224,7 @@ export function apply(ctx: Context, config: Config) {
         try {
           const r = await fetch(upstreamUrl, {
             signal: ctrl.signal,
-            headers: { 'user-agent': 'dsh-plugin-top/0.4 (server proxy)' },
+            headers: { 'user-agent': 'dsh-plugin-top/1.0 (server proxy)' },
           })
           clearTimeout(t)
           const buf = Buffer.from(await r.arrayBuffer())
