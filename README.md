@@ -4,8 +4,6 @@
 
 ![plugin_top 面板](assets/panel.png)
 
-![plugin_top 面板 · 榜单与分类联动](assets/panel-2.png)
-
 ## 你会得到什么
 
 **浏览器侧**（DSH Web 装完即用）：
