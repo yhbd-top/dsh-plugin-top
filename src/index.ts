@@ -127,7 +127,7 @@ function fmtRows(data: MicroData, list: MicroPlugin[], startIdx = 1): string {
       const catZh = (p.cat && data.cats?.[p.cat]) || p.cat || 'other'
       const tag = p.n ? '' : '（兼容工具）'
       const desc = (p.desc || '').slice(0, 110)
-      return `${startIdx + i}. ${p.repo}  ★${p.stars}${tag}  [${catZh}]\n   ${desc}\n   安装: dsh plugin add ${p.repo}  |  https://www.yhbd.top/plugins/${encodeURIComponent(p.slug)}/`
+      return `${startIdx + i}. ${p.repo}  ★${p.stars}${tag}  [${catZh}]\n   ${desc}\n   安装: dsh plugin add github:${p.repo}  |  https://www.yhbd.top/plugins/${encodeURIComponent(p.slug)}/`
     })
     .join('\n')
 }
