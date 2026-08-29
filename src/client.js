@@ -4,8 +4,9 @@
 // 客户场景：
 //   1. 装完插件 → DSH 侧边栏出现 plugin_top 按钮 → 点开悬浮面板
 //   2. 搜索框（本地即时搜）+ 分类 chips + 三个榜（今日新增/近期飙升/原生星榜）
-//   3. 点行 → 新开 yhbd.top 详情页；点「安装」→ 安装指引写入当前会话输入框，
-//      用户回车即可让 Agent 执行；无会话时降级为复制到剪贴板
+//   3. 点行 → 新开 yhbd.top 详情页；点「安装」→ 引导语写入当前会话输入框
+//      （"请帮我了解这个 dsh-plugin 社区插件：【名称】【GitHub 地址】，安装前要做安全审查"），
+//      用户回车即可让 Agent 先审查再装；无会话时降级为复制到剪贴板
 // 数据源：DSH Web 同源 /api/plugin-top/data（由服务端反代 yhbd.top，无需 CORS）
 // 客户端缓存：sessionStorage（6 小时新鲜度）
 
@@ -137,7 +138,8 @@ function detailUrl(p) {
 }
 
 function installGuide(p) {
-  return "帮我安装这个 DSH 插件：" + detailUrl(p) + "（安装命令：dsh plugin add " + p.repo + "）";
+  const name = (p.repo.split("/")[1] || p.repo);
+  return "请帮我了解这个 dsh-plugin 社区插件：【" + name + "】【https://github.com/" + p.repo + "】，安装前要做安全审查。";
 }
 
 // ---------------------------------------------------------------- component
@@ -446,9 +448,9 @@ function YhbdTopPanel(props) {
                 "data-yhbd-inst": "",
                 "data-done": doneKey === p.slug ? "" : undefined,
                 type: "button",
-                title: "dsh plugin add " + p.repo,
+                title: "写入会话输入框：请 Agent 先了解该插件并做安全审查",
                 onClick: (e) => { e.stopPropagation(); handleInstall(p); },
-              }, doneKey === p.slug ? "✓ 已添加" : "安装 →")
+              }, doneKey === p.slug ? "✓ 已写入" : "安装 →")
             ),
             h("div", { className: "meta" },
               tab === "champs"

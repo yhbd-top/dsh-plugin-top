@@ -201,18 +201,21 @@ for (const [tabId, want] of Object.entries(expect)) {
   if (!ok2) pass = false;
 }
 
-// ---------------- [6] 安装 → 会话输入框 draft ----------------
+// ---------------- [6] 安装 → 会话输入框 draft（审查优先引导语） ----------------
 {
   const tree = renderOpen("top");
   const btn = walk(tree, (n) => n.p && n.p["data-yhbd-inst"] !== undefined)[0];
   btn.p.onClick({ stopPropagation() {}, target: { closest: () => null } });
-  const ok = draft.includes("dsh plugin add u/mem-a") && draft.includes("帮我安装");
-  console.log("[6] 安装写入 draft:", ok ? "✓" : "✗", "| draft=" + JSON.stringify(draft.slice(0, 60)) + "…");
+  const ok = draft.includes("请帮我了解这个 dsh-plugin 社区插件")
+    && draft.includes("【mem-a】")
+    && draft.includes("【https://github.com/u/mem-a】")
+    && draft.includes("安装前要做安全审查");
+  console.log("[6] 安装写入 draft:", ok ? "✓" : "✗", "| draft=" + JSON.stringify(draft) );
   if (!ok) pass = false;
   // 已有草稿时换行追加不覆盖
   draft = "旧内容";
   btn.p.onClick({ stopPropagation() {}, target: { closest: () => null } });
-  const ok2 = draft.startsWith("旧内容\n") && draft.includes("u/mem-a");
+  const ok2 = draft.startsWith("旧内容\n") && draft.includes("github.com/u/mem-a");
   console.log("[6] 追加不覆盖:", ok2 ? "✓" : "✗");
   if (!ok2) pass = false;
 }
