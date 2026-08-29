@@ -2,6 +2,10 @@
 
 > 侧边栏一键打开 [www.yhbd.top](https://www.yhbd.top) 插件雷达：搜索框 + 22 分类 + 站点同款五榜单（原生星榜 / 飙升 / 今日新秀 / 兼容工具 / 分类冠军），看中哪个点「安装 →」，安装指引直接落进当前会话输入框。
 
+![plugin_top 面板](assets/panel.png)
+
+![plugin_top 面板 · 榜单与分类联动](assets/panel-2.png)
+
 ## 你会得到什么
 
 **浏览器侧**（DSH Web 装完即用）：
