@@ -299,7 +299,7 @@ function YhbdTopPanel(props) {
     if (result && result.ok) {
       setDoneKey(p.slug);
       if (result.fallback === "clipboard") {
-        showNote("ok", "已复制安装命令到剪贴板 ✓");
+        showNote("ok", "引导语已复制到剪贴板 ✓");
       } else {
         showNote("ok", "安装指引已写入当前会话输入框 ✓");
         if (closeTimer.current) clearTimeout(closeTimer.current);
