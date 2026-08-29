@@ -130,17 +130,61 @@ function renderOpen(tabId) {
   return Comp(props);
 }
 
-// ---------------- [4] 面板渲染 + 五榜单数量 ----------------
-const expect = { top: 4, rising: 2, new: 2, compat: 3, champs: 2 };
+// ---------------- [4] 面板渲染 + 榜单数量（全部/原生/飙升/新秀/兼容/冠军） ----------------
+const POS = { width: "880px", height: "700px", left: "60px", top: "24px" };
+const expect = { all: 7, top: 4, rising: 2, new: 2, compat: 3, champs: 2 };
 let pass = true;
 for (const [tabId, want] of Object.entries(expect)) {
   const tree = renderOpen(tabId);
   const panel = walk(tree, (n) => n.p && n.p["data-yhbd-panel"] !== undefined);
   const rows = walk(tree, (n) => n.p && n.p["data-yhbd-row"] !== undefined);
   const tabs = walk(tree, (n) => n.p && n.p["data-yhbd-tab"] !== undefined);
-  const ok = panel.length === 1 && rows.length === want && tabs.length === 5;
+  const ok = panel.length === 1 && rows.length === want && tabs.length === 6;
   console.log("[4:" + tabId + "] panel=" + panel.length + " rows=" + rows.length + "/want " + want + " tabs=" + tabs.length + (ok ? " ✓" : " ✗"));
   if (!ok) pass = false;
+}
+
+// ---------------- [4b] 分类条联动：选中榜单后分类只统计榜内插件 ----------------
+{
+  // 今日新秀榜只有 mem-a(memory) + vis-b(vision) → 分类条应只有这 2 类，各 1，不含 other/兼容
+  function chipText(n) {
+    const out = [];
+    (function grab(x) {
+      if (typeof x === "string") out.push(x);
+      else if (Array.isArray(x)) x.forEach(grab);
+    }(n.c));
+    return out.join("");
+  }
+  const tree = renderOpen("new");
+  const chips = walk(tree, (n) => n.p && n.p["data-yhbd-cat"] !== undefined);
+  const texts = chips.map(chipText);
+  const hasMemory = texts.some((t) => t.includes("记忆与知识 1"));
+  const hasVision = texts.some((t) => t.includes("视觉与多媒体 1"));
+  const hasOther = texts.some((t) => /其它 [23]/.test(t)); // 不该出现全站其它计数
+  const ok = hasMemory && hasVision && !hasOther && chips.length === 3; // 全部 + 2 分类
+  console.log("[4b] 新秀榜分类联动:", "chips=" + chips.length, JSON.stringify(texts), ok ? "✓" : "✗");
+  if (!ok) pass = false;
+}
+
+// ---------------- [4c] 榜单内按分类过滤（不跳回全集） ----------------
+{
+  // 全部榜(7) 选 memory-knowledge → 只剩 mem-a、mem-c 两条 native
+  slots = []; resetHooks(); Comp(props);
+  slots[0] = true; slots[1] = fixture; slots[5] = "memory-knowledge"; slots[7] = POS; // cat
+  resetHooks();
+  const tree = Comp(props);
+  const rows = walk(tree, (n) => n.p && n.p["data-yhbd-row"] !== undefined);
+  const ok = rows.length === 2;
+  console.log("[4c] 全部榜内选分类:", rows.length, "/want 2", ok ? "✓" : "✗");
+  if (!ok) pass = false;
+  // 关键：在新秀榜内选 memory，应只剩 mem-a（1 条），不是全站的 2 条 memory
+  slots = []; resetHooks(); Comp(props);
+  slots[0] = true; slots[1] = fixture; slots[6] = "new"; slots[5] = "memory-knowledge"; slots[7] = POS;
+  resetHooks();
+  const rows2 = walk(Comp(props), (n) => n.p && n.p["data-yhbd-row"] !== undefined);
+  const ok2 = rows2.length === 1;
+  console.log("[4c] 新秀榜内选分类:", rows2.length, "/want 1（榜内过滤）", ok2 ? "✓" : "✗");
+  if (!ok2) pass = false;
 }
 
 // ---------------- [5] champs 行含 🏆、rising 行含 ▲ ----------------
@@ -174,7 +218,6 @@ for (const [tabId, want] of Object.entries(expect)) {
 }
 
 // ---------------- [7] 搜索 + 分类过滤 ----------------
-const POS = { width: "880px", height: "700px", left: "60px", top: "24px" };
 {
   slots = []; resetHooks(); Comp(props);
   slots[0] = true; slots[1] = fixture; slots[4] = "记忆"; slots[7] = POS; // q

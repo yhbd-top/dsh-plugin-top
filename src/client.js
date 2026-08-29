@@ -141,8 +141,10 @@ function installGuide(p) {
 }
 
 // ---------------------------------------------------------------- component
-// 五个榜单，口径与站点 rankings.html 对齐（native/compatible 分组隔离，2026-08-27 定调）
+// 顶层 tab：「全部」是全集（最上层），其后为站点同款细分榜单
+// （口径与 rankings.html 对齐：native/compatible 分组隔离，2026-08-27 定调）
 const TABS = [
+  { id: "all", label: "全部" },
   { id: "top", label: "原生星榜" },
   { id: "rising", label: "飙升" },
   { id: "new", label: "今日新秀" },
@@ -177,10 +179,12 @@ function boardCounts(data) {
 
 function tabSuffix(id, data) {
   const c = boardCounts(data);
+  if (id === "all") return " " + data.plugins.length.toLocaleString();
   if (id === "top") return " " + c.native.toLocaleString();
   if (id === "compat") return " " + c.compat.toLocaleString();
   if (id === "champs") return " " + c.champs.length;
   if (id === "new") return data.newToday ? " +" + data.newToday : "";
+  if (id === "rising") return data.risingSlugs && data.risingSlugs.length ? " " + data.risingSlugs.length : "";
   return "";
 }
 
@@ -192,7 +196,7 @@ function YhbdTopPanel(props) {
   const [loading, setLoading] = useState(false);
   const [q, setQ] = useState("");
   const [cat, setCat] = useState("");
-  const [tab, setTab] = useState("top");
+  const [tab, setTab] = useState("all");
   const [pos, setPos] = useState(null);
   const [doneKey, setDoneKey] = useState("");
   const [note, setNote] = useState(null); // { kind: 'ok'|'bad', text }
@@ -304,52 +308,54 @@ function YhbdTopPanel(props) {
     }
   }
 
-  // 分类统计（含 other 兜底）
+  // 当前 tab/搜索的基础集合（分类过滤前）——分类条与列表都从它派生，保证联动
+  const base = useMemo(() => {
+    if (!data) return { rows: [], label: "" };
+    const tokens = q.trim().toLowerCase().split(/[\s,，、]+/).filter(Boolean);
+    if (tokens.length) {
+      // 搜索作用于全目录（最高优先动作），分类条随之只统计命中结果的分布
+      return { rows: searchLocal(data, tokens, undefined, 100), label: "搜索" };
+    }
+    const byStars = (a, b) => b.stars - a.stars;
+    if (tab === "top") return { rows: data.plugins.filter((p) => p.n).slice().sort(byStars), label: "原生星榜" };
+    if (tab === "compat") return { rows: data.plugins.filter((p) => !p.n).slice().sort(byStars), label: "兼容工具" };
+    if (tab === "champs") return { rows: boardCounts(data).champs, label: "分类冠军" };
+    if (tab === "new") {
+      const bySlug = new Map(data.plugins.map((p) => [p.slug, p]));
+      return { rows: (data.newSlugs || []).map((s) => bySlug.get(s)).filter(Boolean), label: "今日新秀" };
+    }
+    if (tab === "rising") {
+      const bySlug = new Map(data.plugins.map((p) => [p.slug, p]));
+      return {
+        rows: (data.risingSlugs || [])
+          .map((r) => { const p = bySlug.get(r.slug); return p ? Object.assign({}, p, { delta: r.delta }) : null; })
+          .filter(Boolean),
+        label: "飙升",
+      };
+    }
+    // "全部"：全集按星排（最上层）
+    return { rows: data.plugins.slice().sort(byStars), label: "全部" };
+  }, [data, q, tab]);
+
+  // 分类条：只统计当前榜单/搜索结果里的分类分布（与上面 tab 联动）
   const catRows = useMemo(() => {
-    if (!data) return [];
     const counts = {};
-    for (const p of data.plugins) {
+    for (const p of base.rows) {
       const k = p.cat || "other";
       counts[k] = (counts[k] || 0) + 1;
     }
     return Object.keys(counts)
-      .map((k) => ({ k, zh: (data.cats && data.cats[k]) || k, n: counts[k] }))
+      .map((k) => ({ k, zh: (data && data.cats && data.cats[k]) || k, n: counts[k] }))
       .sort((a, b) => b.n - a.n);
-  }, [data]);
+  }, [base, data]);
 
-  // 当前列表：搜索/分类过滤优先，否则按 tab 出榜（stars 榜全量）
-  const view = useMemo(() => {
-    if (!data) return { rows: [], mode: tab };
-    const tokens = q.trim().toLowerCase().split(/[\s,，、]+/).filter(Boolean);
-    if (tokens.length || cat) {
-      // 带关键词限 100 条；只点分类 chip 时全量出该分类（不截断，星序排）
-      return { rows: searchLocal(data, tokens, cat, tokens.length ? 100 : 100000), mode: "search" };
-    }
-    if (tab === "new") {
-      const bySlug = new Map(data.plugins.map((p) => [p.slug, p]));
-      return { rows: (data.newSlugs || []).map((s) => bySlug.get(s)).filter(Boolean), mode: "new" };
-    }
-    if (tab === "rising") {
-      const bySlug = new Map(data.plugins.map((p) => [p.slug, p]));
-      return { rows: (data.risingSlugs || [])
-        .map((r) => {
-          const p = bySlug.get(r.slug);
-          return p ? Object.assign({}, p, { delta: r.delta }) : null;
-        })
-        .filter(Boolean), mode: "rising" };
-    }
-    if (tab === "compat") {
-      // 兼容工具榜：非原生（kind=plugin 之外的通用平台工具）按 stars，全量
-      return { rows: data.plugins.filter((p) => !p.n).slice().sort((a, b) => b.stars - a.stars), mode: "compat" };
-    }
-    if (tab === "champs") {
-      return { rows: boardCounts(data).champs, mode: "champs" };
-    }
-    // 原生星榜：与站点口径一致，只排 native，全量不截断
-    return { rows: data.plugins.filter((p) => p.n).slice().sort((a, b) => b.stars - a.stars), mode: "top" };
-  }, [data, q, cat, tab]);
+  // 最终列表 = 基础集合内再按选中分类过滤（不跳回全集）
+  const view = useMemo(
+    () => ({ rows: cat ? base.rows.filter((p) => (p.cat || "other") === cat) : base.rows, mode: base.label }),
+    [base, cat]
+  );
 
-  const searching = view.mode === "search";
+  const searching = base.label === "搜索";
 
   function switchTab(t) {
     setTab(t);
@@ -382,7 +388,7 @@ function YhbdTopPanel(props) {
     body = h("div", { "data-yhbd-status": "" }, "正在加载 3700+ 插件目录…");
   } else {
     body = h(React.Fragment, null,
-      // tabs：五个榜单，与站点 rankings.html 对齐
+      // tabs：全部（顶层）+ 站点同款细分榜单
       h("div", { "data-yhbd-tabs": "" },
         TABS.map((t) =>
           h("button", {
@@ -404,17 +410,17 @@ function YhbdTopPanel(props) {
           onChange: (e) => setQ(e.currentTarget.value),
         })
       ),
-      // category chips
+      // category chips：随当前榜单联动，计数只反映本榜单里的插件分布
       h("div", { "data-yhbd-cats": "" },
-        h("button", { "data-yhbd-cat": "", "data-active": !cat ? "" : undefined, type: "button", onClick: () => setCat("") },
-          "全部 " + data.total),
+        h("button", { "data-yhbd-cat": "", "data-active": !cat ? "" : undefined, type: "button", title: "返回本榜单全部（不筛选分类）", onClick: () => setCat("") },
+          "全部 " + base.rows.length),
         catRows.map((c) =>
           h("button", {
             key: c.k,
             "data-yhbd-cat": "",
             "data-active": cat === c.k ? "" : undefined,
             type: "button",
-            title: c.zh + " · " + c.n + " 个插件",
+            title: c.zh + " · 本榜 " + c.n + " 个插件",
             onClick: () => setCat(cat === c.k ? "" : c.k),
           }, c.zh + " " + c.n)
         )
@@ -445,7 +451,7 @@ function YhbdTopPanel(props) {
               }, doneKey === p.slug ? "✓ 已添加" : "安装 →")
             ),
             h("div", { className: "meta" },
-              view.mode === "champs"
+              tab === "champs"
                 ? "🏆 " + ((data.cats && data.cats[p.cat || "other"]) || p.cat || "other") + " 分类冠军 · dsh plugin add " + p.repo
                 : ((data.cats && data.cats[p.cat || "other"]) || p.cat || "other") + " · dsh plugin add " + p.repo),
             p.desc ? h("div", { className: "desc" }, p.desc) : null
