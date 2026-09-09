@@ -87,7 +87,7 @@ async function loadIndex(config: Config): Promise<{ data: MicroData; note: strin
   }
 }
 
-// ---------- 本地检索：token 加权 contains，3700 条毫秒级 ----------
+// ---------- 本地检索：token 加权 contains，数千条毫秒级 ----------
 function search(data: MicroData, q: string, cat: string | undefined, native: boolean | undefined, minStars: number, limit: number): MicroPlugin[] {
   const tokens = (q || '').toLowerCase().split(/[\s,，、]+/).filter(Boolean)
   const scored: { p: MicroPlugin; s: number }[] = []

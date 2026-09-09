@@ -387,7 +387,7 @@ function YhbdTopPanel(props) {
       h("button", { className: "retry", type: "button", onClick: () => loadData(true) }, "重试")
     );
   } else if (!data) {
-    body = h("div", { "data-yhbd-status": "" }, "正在加载 3700+ 插件目录…");
+    body = h("div", { "data-yhbd-status": "" }, "正在加载插件目录…");
   } else {
     body = h(React.Fragment, null,
       // tabs：全部（顶层）+ 站点同款细分榜单
