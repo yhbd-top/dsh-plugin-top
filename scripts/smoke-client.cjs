@@ -1,6 +1,6 @@
 // 冒烟测试：模拟 DSH 浏览器 loader + mini React hook 运行时，无头跑通
 // dist/client.js 的完整交互链路：模块面 → slot 注册 → 面板渲染 →
-// 五榜单切换 → 安装按钮写入会话输入框（draft 捕获断言）
+// 五榜单切换 → 安装按钮复制仓库地址并打开客户端「插件」页
 const vm = require("vm");
 const fs = require("fs");
 const path = require("path");
@@ -43,9 +43,9 @@ const sandbox = {
     addEventListener() {},
     removeEventListener() {},
   },
-  navigator: {},
-  setTimeout: () => 0,
-  clearTimeout: () => {},
+  navigator: { clipboard: { writeText: (t) => { copiedText = t; } } },
+  setTimeout: (fn, ms) => setTimeout(fn, ms),
+  clearTimeout: (id) => clearTimeout(id),
   console,
 };
 vm.createContext(sandbox);
@@ -59,29 +59,27 @@ const face = sandbox.__reg.factory((spec) => {
 const faceKeys = Object.keys(face).sort().join(",");
 console.log("[2] module face:", faceKeys, "| inject:", JSON.stringify(face.inject));
 if (faceKeys !== "apply,inject") { console.error("FAIL: module face"); process.exit(1); }
-if (JSON.stringify(face.inject) !== JSON.stringify(["slots", "sessions", "conversation"])) {
+// 新版只硬依赖 slots（「插件」页走 ctx.get("layout") 可选访问）
+if (JSON.stringify(face.inject) !== JSON.stringify(["slots"])) {
   console.error("FAIL: inject 名单不对"); process.exit(1);
 }
 
-// ---------------- ctx 假实现：slots + sessions + conversation ----------------
-let draft = "";
+// ---------------- ctx 假实现：slots + 可选 layout ----------------
+let copiedText = "";
+let panelSelected = null;
 let captured = null;
+const registrations = [];
+// 模拟插件页交下来的 action（真实来源：dsh-client-ui-plugin-manager 对 plugins.item 的注入）
+const dialogCalls = [];
 const ctxFake = {
+  get: (k) => (k === "layout" ? { selectPanel: (id) => { panelSelected = id; } } : undefined),
   slots: {
-    inject: (name, fn) => { captured = { slot: name, reg: fn() }; },
-    register: (meta, Comp) => [meta, Comp],
-  },
-  sessions: {
-    list: { getSnapshot: () => ({ current: "session-smoke" }) },
-    scope: (id) => ({ id }),
-  },
-  conversation: {
-    input: {
-      for: () => ({
-        state: { getSnapshot: () => ({ draft }) },
-        setDraft: (t) => { draft = t; },
-      }),
+    inject: (name, fn) => {
+      const reg = fn();
+      registrations.push({ name, reg });
+      if (name === "sidebar.footer.action") captured = { slot: name, reg };
     },
+    register: (meta, Comp) => [meta, Comp],
   },
 };
 face.apply(ctxFake);
@@ -201,25 +199,35 @@ for (const [tabId, want] of Object.entries(expect)) {
   if (!ok2) pass = false;
 }
 
-// ---------------- [6] 安装 → 会话输入框 draft（审查优先引导语） ----------------
+// ---------------- [6] 安装 → 复制仓库地址 + 打开客户端「插件」页 ----------------
+const pending = []; // 本轮无异步用例；保留尾部 Promise.all 结构
+// 面板上的 action 是同步的（复制 + selectPanel），点完即可断言。
+// 「打开『添加插件』并把地址填进去」走的是 DOM 通道（查 aria-haspopup="dialog" 按钮，
+// 再用原生 value setter + input 事件写入），需要真实浏览器环境，沙箱里没有 document，
+// 因此这里只断言一定成立的部分；DOM 那条以真实应用的诊断轨迹为准。
 {
   const tree = renderOpen("top");
   const btn = walk(tree, (n) => n.p && n.p["data-yhbd-inst"] !== undefined)[0];
-  btn.p.onClick({ stopPropagation() {}, target: { closest: () => null } });
-  const ok = draft.includes("请帮我了解这个 dsh-plugin 社区插件")
-    && draft.includes("【mem-a】")
-    && draft.includes("【https://github.com/u/mem-a】")
-    && draft.includes("安装前要做安全审查");
-  console.log("[6] 安装写入 draft:", ok ? "✓" : "✗", "| draft=" + JSON.stringify(draft) );
+  const click = () => btn.p.onClick({ stopPropagation() {}, target: { closest: () => null } });
+
+  copiedText = "";
+  panelSelected = null;
+  click();
+  const ok = copiedText === "https://github.com/u/mem-a" && panelSelected === "plugins";
+  console.log("[6] 安装 → 复制仓库地址 + 打开「插件」页:", ok ? "✓" : "✗",
+    "| copied=" + JSON.stringify(copiedText) + " panel=" + JSON.stringify(panelSelected));
   if (!ok) pass = false;
-  // 已有草稿时换行追加不覆盖
-  draft = "旧内容";
-  btn.p.onClick({ stopPropagation() {}, target: { closest: () => null } });
-  const ok2 = draft.startsWith("旧内容\n") && draft.includes("github.com/u/mem-a");
-  console.log("[6] 追加不覆盖:", ok2 ? "✓" : "✗");
+
+  // 没有 layout 服务（或它没有 selectPanel）时：仍然复制，只是不开面板
+  const ctxNoLayout = { slots: ctxFake.slots, get: () => undefined };
+  face.apply(ctxNoLayout);
+  const onInstallNoLayout = captured.reg[0].inject().onInstall;
+  copiedText = "";
+  const r2 = onInstallNoLayout({ repo: "u/mem-a" });
+  const ok2 = copiedText === "https://github.com/u/mem-a" && r2.ok === true && r2.openedPluginsPanel === false;
+  console.log("[6] 无 layout 时仍复制:", ok2 ? "✓" : "✗", "| copied=" + JSON.stringify(copiedText));
   if (!ok2) pass = false;
 }
-
 // ---------------- [7] 搜索 + 分类过滤 ----------------
 {
   slots = []; resetHooks(); Comp(props);
@@ -241,5 +249,8 @@ for (const [tabId, want] of Object.entries(expect)) {
   if (!ok2) pass = false;
 }
 
-console.log(pass ? "SMOKE DONE · ALL PASS" : "SMOKE DONE · HAS FAILURES");
-process.exit(pass ? 0 : 1);
+// 等异步断言（[6c] 的新会话路径）全部结算后再出总结
+Promise.all(pending).then(() => {
+  console.log(pass ? "SMOKE DONE · ALL PASS" : "SMOKE DONE · HAS FAILURES");
+  process.exit(pass ? 0 : 1);
+});

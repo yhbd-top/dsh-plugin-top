@@ -4,9 +4,9 @@
 // 客户场景：
 //   1. 装完插件 → DSH 侧边栏出现 plugin_top 按钮 → 点开悬浮面板
 //   2. 搜索框（本地即时搜）+ 分类 chips + 三个榜（今日新增/近期飙升/原生星榜）
-//   3. 点行 → 新开 yhbd.top 详情页；点「安装」→ 引导语写入当前会话输入框
-//      （"请帮我了解这个 dsh-plugin 社区插件：【名称】【GitHub 地址】，安装前要做安全审查"），
-//      用户回车即可让 Agent 先审查再装；无会话时降级为复制到剪贴板
+//   3. 点行 → 新开 yhbd.top 详情页；点「安装」→ 复制该插件的 GitHub 仓库地址，并打开
+//      客户端自带的「插件」页（在那里点「添加插件」把地址粘进去即可安装）
+//      —— 走官方入口 ctx.layout.selectPanel("plugins")
 // 数据源：DSH Web 同源 /api/plugin-top/data（由服务端反代 yhbd.top，无需 CORS）
 // 客户端缓存：sessionStorage（6 小时新鲜度）
 
@@ -137,9 +137,10 @@ function detailUrl(p) {
   return SITE + "/plugins/" + encodeURIComponent(p.slug) + "/";
 }
 
-function installGuide(p) {
-  const name = (p.repo.split("/")[1] || p.repo);
-  return "请帮我了解这个 dsh-plugin 社区插件：【" + name + "】【https://github.com/" + p.repo + "】，安装前要做安全审查。";
+// 「安装 →」复制的是**仓库地址**：客户端「添加插件」对话框接受
+// 「包名 / GitHub 仓库地址 / 本地目录路径」，粘进去即可。
+function repoUrl(p) {
+  return "https://github.com/" + p.repo;
 }
 
 // ---------------------------------------------------------------- component
@@ -295,18 +296,18 @@ function YhbdTopPanel(props) {
   }
 
   function handleInstall(p) {
-    const result = onInstall ? onInstall(p) : { ok: false, why: "no-handler" };
-    if (result && result.ok) {
+    const res = onInstall ? onInstall(p) : { ok: false };
+    if (res && res.ok) {
       setDoneKey(p.slug);
-      if (result.fallback === "clipboard") {
-        showNote("ok", "引导语已复制到剪贴板 ✓");
-      } else {
-        showNote("ok", "安装指引已写入当前会话输入框 ✓");
-        if (closeTimer.current) clearTimeout(closeTimer.current);
-        closeTimer.current = setTimeout(() => setOpen(false), 700);
-      }
+      showNote("ok", res.filledDialog
+        ? "已复制仓库地址 ✓ 已打开『添加插件』并填入地址 —— 确认后点安装即可（如为空请 Ctrl+V）"
+        : (res.openedPluginsPanel
+          ? "已复制仓库地址 ✓ 已打开「插件」页 —— 请点『添加插件』后 Ctrl+V 粘贴"
+          : "已复制仓库地址 ✓ 请打开「插件 → 添加插件」粘贴"));
+      if (closeTimer.current) clearTimeout(closeTimer.current);
+      closeTimer.current = setTimeout(() => setOpen(false), 1600);
     } else {
-      showNote("bad", "写入输入框失败：" + ((result && result.why) || "unknown"));
+      showNote("bad", "自动复制失败，请手动复制：" + ((res && res.copied) || ""));
     }
   }
 
@@ -448,7 +449,7 @@ function YhbdTopPanel(props) {
                 "data-yhbd-inst": "",
                 "data-done": doneKey === p.slug ? "" : undefined,
                 type: "button",
-                title: "写入会话输入框：请 Agent 先了解该插件并做安全审查",
+                title: "复制仓库地址、打开「插件」页并自动填入『添加插件』对话框",
                 onClick: (e) => { e.stopPropagation(); handleInstall(p); },
               }, doneKey === p.slug ? "✓ 已写入" : "安装 →")
             ),
@@ -495,31 +496,15 @@ function YhbdTopPanel(props) {
 }
 
 // ---------------------------------------------------------------- module face
-// 需要 ctx.sessions + ctx.conversation —— 因为面板要把安装指引写入当前会话输入框
-const inject = ["slots", "sessions", "conversation"];
+// 需要 ctx.sessions + ctx.conversation；ctx.uiWorkspace 为可选（走 ctx.get("uiWorkspace")）
+// —— 点「安装」时优先用它新开一个会话，再把引导语写进那个会话的输入框
+// ---------------------------------------------------------------- module face
+// 只硬依赖 slots；「插件」页走 ctx.get("layout") 可选访问 ——
+// 不再硬依赖 sessions/conversation（上一版那套"新建会话 + 写输入框"已废弃）
+const inject = ["slots"];
 
 function apply(ctx) {
   injectCss();
-
-  function onInstall(p) {
-    try {
-      const current = ctx.sessions.list.getSnapshot().current;
-      if (!current) {
-        return copyToClipboard(installGuide(p))
-          ? { ok: true, fallback: "clipboard" }
-          : { ok: false, why: "无当前会话，且剪贴板不可用" };
-      }
-      const scoped = ctx.sessions.scope(current);
-      if (!scoped) return { ok: false, why: "会话 scope 未解析" };
-      const input = ctx.conversation.input.for(scoped);
-      const existing = (input.state.getSnapshot().draft || "").replace(/\s+$/, "");
-      const guide = installGuide(p);
-      input.setDraft(existing ? existing + "\n" + guide : guide);
-      return { ok: true };
-    } catch (e) {
-      return { ok: false, why: (e && e.message) || String(e) };
-    }
-  }
 
   function copyToClipboard(text) {
     try {
@@ -529,6 +514,117 @@ function apply(ctx) {
       }
     } catch (_e) { /* ignore */ }
     return false;
+  }
+
+  // 注：曾试图从 plugins.item 占用者那里拿插件页的 openInstall()/editInstallSpec()。
+  // 实测证明这条路不通（占用者渲染了，但 inject 入参与组件 props 里都没有那两个函数）——
+  // 官方注释也写明那份注入是给「页面自己」的（"the face the tab's slot registration injects"）。
+  // 因此改用界面通道：点『添加插件』按钮，再把地址写进它弹出的输入框。
+
+
+
+  // 打开『添加插件』对话框并把仓库地址填进去。
+  //
+  // 实测：官方源码里那个 aria-haspopup="dialog" 并不是落在「添加插件」按钮上
+  //（[aria-haspopup="dialog"] 一个都匹配不到 → no-add-button），所以改为**扫所有 button
+  // 按文案匹配**，只有在文案也没命中时才退回 aria-haspopup。失败时把现场（实际有哪些
+  // 按钮/输入框）写进诊断日志，一次点击即可定位。
+  function fillAddDialog(url) {
+    const brief = (el) => String((el.textContent || "")).replace(/\s+/g, " ").trim().slice(0, 14);
+    try {
+      if (typeof document === "undefined") return false;
+      const allButtons = () => Array.prototype.slice.call(document.querySelectorAll("button"));
+      const findAdd = () => allButtons().filter((b) => /添加插件/.test(b.textContent || ""))[0]
+        || allButtons().filter((b) => /add plugin/i.test(b.textContent || ""))[0];
+
+      // 关键：selectPanel 是异步的，面板要等下一次渲染才切过去 —— 必须**轮询等按钮出现**，
+      // 不能同步扫（实测同步扫时文档里有 115 个按钮，「添加插件」还没渲染出来）。
+      const waitAdd = (left) => {
+        const btn = findAdd();
+        if (btn) {
+
+          btn.click();
+          fillInput(25);
+          return;
+        }
+        if (left <= 0) {
+          const bs = allButtons();
+
+          return;
+        }
+        // 中途兜底：直接点侧边栏那个「插件」入口，逼面板切过去
+        if (left === 20) {
+          const nav = allButtons().filter((b) => /^(插件|Plugins)$/.test(String(b.textContent || "").trim()))[0];
+          if (nav) nav.click();
+        }
+        setTimeout(() => waitAdd(left - 1), 100);
+      };
+
+      const fillInput = (left) => {
+        try {
+          // 只认**正面证据**：官方 installSpecPlaceholder 是
+          // 「例如 @deepseek-ai/dsh-subagent-codex」，全文档搜它最稳。
+          // 上一版允许退化到「容器里第一个 input」，结果伪命中的容器把我自己的搜索框
+          // （ph=搜索：仓库名 / 关键词 / 分类）当成目标写了进去 —— 不许再退化。
+          const all = () => Array.prototype.slice.call(document.querySelectorAll("input"));
+          const byPh = () => all().filter((i) => /@deepseek|subagent/i.test(i.placeholder || ""))[0];
+          let target = byPh();
+          if (!target) {
+            // 次选：官方对话框容器（CSS module 键名 installDialog）里的第一个文本框
+            const dlg = document.querySelector('[class*="installDialog"]');
+            if (dlg) {
+              const ins = Array.prototype.slice.call(dlg.querySelectorAll("input"))
+                .filter((i) => i.type !== "search" && i.type !== "checkbox" && i.type !== "radio");
+              if (ins.length) target = ins[0];
+            }
+          }
+          if (!target) {
+            if (left <= 0) {
+              // 现场：全文档输入框的 占位符/类型/类名 —— 足以定位真正的那个
+
+              return;
+            }
+            setTimeout(() => fillInput(left - 1), 100);
+            return;
+          }
+          const desc = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value");
+          desc.set.call(target, url);
+          target.dispatchEvent(new Event("input", { bubbles: true }));
+
+          // 400ms 后回读：React 若因 store 未更新而重渲染会把值刷掉
+        } catch (e) {
+
+        }
+      };
+
+      setTimeout(() => waitAdd(30), 100);
+      return true;
+    } catch (e) {
+
+      return false;
+    }
+  }
+
+  // 「安装 →」：复制仓库地址 + 打开客户端自带的「插件」页 + 点开『添加插件』并填入地址。
+  //
+  // 打开方式取自官方实现：它自己在 sidebar.panellist 注册 id = PANEL_ID("plugins") 的面板，
+  // 并用 ctx.layout.selectPanel(PANEL_ID) 打开自己。
+  function onInstall(p) {
+    const url = repoUrl(p);
+    const copied = copyToClipboard(url);
+    let opened = false;
+    try {
+      const layout = ctx.get && ctx.get("layout");
+      if (layout && typeof layout.selectPanel === "function") {
+        layout.selectPanel("plugins");
+        opened = true;
+      }
+    } catch (_e) {
+      opened = false;
+    }
+    const started = fillAddDialog(url);
+
+    return { ok: copied, copied: url, openedPluginsPanel: opened, filledDialog: started };
   }
 
   ctx.slots.inject("sidebar.footer.action", () =>

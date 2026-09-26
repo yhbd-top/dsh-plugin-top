@@ -2,7 +2,6 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import type { Context } from '@deepseek-ai/cordis'
-import { defineTool } from '@deepseek-ai/dsh-tools'
 import Schema from '@deepseek-ai/schemastery'
 
 export const name = 'plugin-top'
@@ -133,8 +132,58 @@ function fmtRows(data: MicroData, list: MicroPlugin[], startIdx = 1): string {
 }
 
 // ---------- 插件入口 ----------
+
+// 内联的 defineTool 等价物。
+//
+// 为什么不 import @deepseek-ai/dsh-tools：它是宿主侧唯一的运行时依赖来源，
+// 而它自身又 import @deepseek-ai/cordis、dsh-scope、dsh-llm、dsh-sandbox 等核心包。
+// profile 的 pnpm-workspace.yaml 设了 autoInstallPeers:false，打包版宿主的模块树又在
+// app.asar 内、不参与 profile 插件的向上解析 —— 于是这些核心包会被当成插件依赖再装一份，
+// 同一进程里出现两套核心实例，identity-keyed 接缝断裂（dsh-scope 用的是非全局
+// Symbol("dsh.scope")），表现为「一发消息就失败」。
+//
+// 这里只复刻 defineTool 的产物形状（见其实现）：
+//   { name, description, parameters, output: { schema, render }, execute }
+// parameters 的规格→JSON Schema 转换与 dsh-tools 的 parameterSchemaSpecToJsonSchema
+// 输出逐字节一致（已用真函数校验）。
+type JsonSchema = Record<string, unknown>
+type ParamSpec = Record<string, { type: string; required?: boolean; description?: string }>
+
+function parametersToJsonSchema(spec: ParamSpec): JsonSchema {
+  const properties: Record<string, JsonSchema> = {}
+  const required: string[] = []
+  for (const [key, def] of Object.entries(spec)) {
+    const prop: JsonSchema = { type: def.type }
+    if (def.description !== undefined) prop.description = def.description
+    properties[key] = prop
+    if (def.required === true) required.push(key)
+  }
+  const schema: JsonSchema = { type: 'object', properties }
+  if (required.length > 0) schema.required = required
+  return schema
+}
+
+function defineTool(options: {
+  name: string
+  description: string
+  parameters: ParamSpec
+  output: { schema: JsonSchema; render: (args: any, value: any) => unknown }
+  execute: (args: any, exec?: any) => Promise<unknown>
+}) {
+  return {
+    name: options.name,
+    description: options.description,
+    parameters: parametersToJsonSchema(options.parameters),
+    output: {
+      schema: options.output.schema,
+      render: options.output.render,
+    },
+    execute: options.execute,
+  }
+}
+
 export function apply(ctx: Context, config: Config) {
-  ctx.tools.register(
+  ;(ctx as any).tools.register(
     defineTool({
       name: 'plugin_top_search',
       description:
@@ -160,7 +209,7 @@ export function apply(ctx: Context, config: Config) {
     }),
   )
 
-  ctx.tools.register(
+  ;(ctx as any).tools.register(
     defineTool({
       name: 'plugin_top_trending',
       description:
@@ -202,6 +251,7 @@ export function apply(ctx: Context, config: Config) {
       },
     }),
   )
+
 
   // ---------- 浏览器侧反向代理：把 https://www.yhbd.top/data/plugins.micro.json
   //            暴露成同源 /api/plugin-top/data —— 客户端 fetch 不走跨域、
