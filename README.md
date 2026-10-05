@@ -26,12 +26,12 @@
 ## 安装
 
 ```sh
-# 从 GitHub 源码安装（当前主渠道；pnpm 首次 add 需要构建授权：
+# 从 GitHub 源码安装 首次 add 需要构建授权：
 # 把 pnpm 打印的包键加入 profile 的 pnpm-workspace.yaml → allowBuilds，重试即可；
 # 建议锁 commit：github:yhbd-top/dsh-plugin-top#<sha>）
 dsh plugin --profile web add github:yhbd-top/dsh-plugin-top
 
-# npm 安装（发布到 registry 后可用）
+# npm 安装
 dsh plugin --profile web add dsh-plugin-top
 
 # 本地 tgz（在仓库目录 npm pack 得到）
